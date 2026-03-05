@@ -6,10 +6,6 @@ import pandas as pd
 pd.set_option('display.max_columns', None)
 import fastf1
 # %%
-
-df = pd.read_parquet("data/2019_01_R.parquet")
-df
-# %%
 class CollectResults:
 
     def __init__(self, years=[2021,2022,2023], modes=["R", "S"]):
