@@ -44,7 +44,7 @@ class CollectResults:
             return False
         
         self.save_data(df, year, gp, mode)
-        time.sleep(1)
+        time.sleep(2)
         return True
     
     def process_year_modes(self, year):
