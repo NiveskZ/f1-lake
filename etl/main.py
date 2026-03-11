@@ -1,236 +1,130 @@
 # %%
-import os
-import dotenv
-dotenv.load_dotenv()
-
 import nekt
-
-from tqdm import tqdm
-from functools import reduce
-from pyspark.sql import DataFrame
-
-# %%
-
-nekt.data_access_token = os.getenv("NEKT_ACCESS_TOKEN")
-# %%
-# Custom imports
-import nekt
-
-query_dates = """
-SELECT
-  DISTINCT date(date) AS dt_ref
-FROM `f1_results`
-WHERE date = '{year}'
-Order by 1
-"""
 
 # Feature Store 
 query = """
 
-WITH 
-  results_until_date AS (
-    SELECT * 
-    FROM `f1_results`
-    WHERE 
-      date(date) <= date('{date}')
-    ORDER BY
-      date Desc
-  ),
-  drivers_selected AS (
-    SELECT DISTINCT
-      DriverId
-    From
-      results_until_date
-    WHERE
-      YEAR >= (
-        SELECT
-          MAX(YEAR) - 2
-        FROM
-          results_until_date
-      )
-  ),
-  tb_result AS (
-    SELECT t1.*
-    FROM 
-      results_until_date AS t1
-    INNER JOIN
-      drivers_selected AS t2
-    ON t1.DriverId = t2.DriverId
-    ORDER BY Year
-  ),
-  tb_life AS (
-    SELECT
-      DriverId,
-      COUNT(DISTINCT Year) AS qtde_seasons,
-      COUNT(*) AS qtde_sessions,
-      SUM(
-        CASE WHEN status = 'Finished' OR status LIKE '+%' THEN 1 ELSE 0 END
-      ) AS qtde_sessions_finished,
-      SUM(
-        CASE
-          WHEN MODE = 'Race' THEN 1 ELSE 0 END
-      ) AS qtde_race,
-      SUM(
-        CASE WHEN (status = 'Finished' OR status LIKE '+%') AND MODE = 'Race' THEN 1 ELSE 0 END
-      ) AS qtde_sessions_finished_race,
-      SUM(
-        CASE
-          WHEN MODE = 'Sprint' THEN 1 ELSE 0 END
-      ) AS qtde_sprint,
-      SUM(
-        CASE WHEN (status = 'Finished' OR status LIKE '+%') AND MODE = 'Sprint' THEN 1 ELSE 0 END
-      ) AS qtde_sessions_finished_sprint,
-      SUM(
-        CASE 
-          WHEN position = 1 THEN 1 ELSE 0 END
-      ) AS qtde_1pos,
-      SUM(
-        CASE 
-          WHEN position = 1 AND MODE = 'Race' THEN 1 ELSE 0 END
-      ) AS qtde_1pos_race,
-      SUM(
-        CASE 
-          WHEN position = 1 AND MODE = 'Sprint' THEN 1 ELSE 0 END
-      ) AS qtde_1pos_sprint,
-      SUM(
-        CASE 
-          WHEN position <= 3 THEN 1 ELSE 0 END
-      ) AS qtde_podios,
-      SUM(
-        CASE 
-          WHEN position <= 3 AND MODE = 'Race' THEN 1 ELSE 0 END
-      ) AS qtde_podios_race,
-      SUM(
-        CASE 
-          WHEN position <= 3 AND MODE = 'Sprint' THEN 1 ELSE 0 END
-      ) AS qtde_podios_sprint,
-      SUM(
-        CASE 
-          WHEN position <= 5 THEN 1 ELSE 0 END
-      ) AS qtde_pos5,
-      SUM(
-        CASE 
-          WHEN position <= 5 AND MODE = 'Race' THEN 1 ELSE 0 END
-      ) AS qtde_pos5_race,
-      SUM(
-        CASE 
-          WHEN position <= 5 AND MODE = 'Sprint' THEN 1 ELSE 0 END
-      ) AS qtde_pos5_sprint,
-      SUM(
-        CASE 
-          WHEN gridposition <= 5 THEN 1 ELSE 0 END
-      ) AS qtde_gridpos5,
-      SUM(
-        CASE 
-          WHEN gridposition <= 5 AND MODE = 'Race' THEN 1 ELSE 0 END
-      ) AS qtde_gridpos5_race,
-      SUM(
-        CASE 
-          WHEN gridposition <= 5 AND MODE = 'Sprint' THEN 1 ELSE 0 END
-      ) AS qtde_gridpos5_sprint,
-      SUM(
-        points
-      ) AS qtde_points,
-      SUM(
-        CASE 
-          WHEN MODE = 'Race' THEN points END
-      ) AS qtde_points_race,
-      SUM(
-        CASE 
-          WHEN MODE = 'Sprint' THEN points END
-      ) AS qtde_points_sprint,
-      AVG(
-        gridposition
-      ) AS avg_gridposition,
-      AVG(
-        CASE 
-          WHEN MODE = 'Race' THEN gridposition END
-      ) AS avg_gridposition_race,
-      AVG(
-        CASE 
-          WHEN MODE = 'Sprint' THEN gridposition END
-      ) AS avg_gridposition_sprint,
-      AVG(
-        position
-      ) AS avg_position,
-      AVG(
-        CASE 
-          WHEN MODE = 'Race' THEN position END
-      ) AS avg_position_race,
-      AVG(
-        CASE 
-          WHEN MODE = 'Sprint' THEN position END
-      ) AS avg_position_sprint,
-      SUM(
-        CASE
-          WHEN gridposition = 1 THEN 1 ELSE 0 END
-      ) AS qtde_1_gridposition,
-      SUM(
-        CASE
-          WHEN gridposition = 1 AND MODE = 'Race' THEN 1 ELSE 0 END
-      ) AS qtde_1_gridposition_race,
-      SUM(
-        CASE
-          WHEN gridposition = 1 AND MODE = 'Sprint' THEN 1 ELSE 0 END
-      ) AS qtde_1_gridposition_sprint,
-      SUM(
-        CASE
-          WHEN gridposition = 1 AND position = 1 THEN 1 ELSE 0 END
-      ) AS qtde_pole_win,
-      SUM(
-        CASE
-          WHEN gridposition = 1 AND position = 1 AND MODE = 'Race' THEN 1 ELSE 0 END
-      ) AS qtde_pole_win_race,
-      SUM(
-        CASE
-          WHEN gridposition = 1 AND position = 1 AND MODE = 'Sprint' THEN 1 ELSE 0 END
-      ) AS qtde_pole_win_sprint,
-      SUM(
-        CASE 
-          WHEN points > 0 THEN 1 ELSE 0 END
-      ) AS qtd_sessions_with_points,
-      SUM(
-        CASE 
-          WHEN MODE = 'Race' AND points > 0 THEN 1 ELSE 0 END
-      ) AS qtd_sessions_with_points_race,
-      SUM(
-        CASE 
-          WHEN MODE = 'Sprint' AND points > 0 THEN 1 ELSE 0 END
-      ) AS qtd_sessions_with_points_sprint,
-      SUM(
-        CASE 
-          WHEN position < gridposition THEN 1 ELSE 0 END
-      ) AS qtd_sessions_with_overtake,
-      SUM(
-        CASE 
-          WHEN position < gridposition AND MODE = 'Race' THEN 1 ELSE 0 END
-      ) AS qtd_sessions_with_overtake_race,
-      SUM(
-        CASE 
-          WHEN position < gridposition AND MODE = 'Sprint' THEN 1 ELSE 0 END
-      ) AS qtd_sessions_with_overtake_sprint,
-      AVG(
-        gridposition - position
-      ) AS avg_overtake,
-      AVG(
-        CASE 
-          WHEN MODE = 'Race' THEN gridposition - position END
-      ) AS avg_overtake_race,
-      AVG(
-        CASE
-          WHEN MODE = 'Sprint' THEN gridposition - position END
-      ) AS avg_overtake_sprint
-      
-    FROM
-      tb_result
-    GROUP BY
-      DriverId
-  )
-SELECT 
-  date('{date}') AS dtRef,
-  *
-FROM tb_life
-ORDER BY DriverId
+WITH
+	-- 1. Determina todas as datas de referência únicas (corridas de 1990 a 2025)
+	dim_dates AS (
+		SELECT DISTINCT date(date) AS dtref,
+					 year AS ref_year
+		FROM f1_results
+		WHERE year >= {year_start} AND year <= {year_stop}
+	),
+
+	-- 2. Cruzamento: Para cada data de referência, encontre todas as sessões que ocorreram antes ou na data de referência
+	past_sessions AS (
+		SELECT 
+			d.dtref, 
+			d.ref_year,
+			f.*
+		FROM dim_dates d
+		INNER JOIN f1_results as f
+			ON date(f.date) <= d.dtref
+	),
+
+	-- 3. Filtra pilotos elegíveis, considerando apenas aqueles que participaram de sessões nos últimos 2 anos antes de cada data de referência
+	eligible_drivers AS (
+		SELECT DISTINCT p.dtref, p.driverid
+		FROM past_sessions p
+		WHERE ref_year - year <= 2
+		order by dtref desc
+	),
+
+	-- 4. Obtém as rodadas distintas que ocorreram antes de cada data de referência
+	distinct_rounds AS (
+		SELECT DISTINCT dtref, year, roundnumber
+		FROM past_sessions
+	),
+
+	-- 5. Ordena a lista de rodadas para cada data de referência e atribui um número de linha
+	ranked_rounds AS (
+		SELECT 
+			dtref, 
+			year, 
+			roundnumber,
+			ROW_NUMBER() OVER (PARTITION BY dtref ORDER BY year DESC, roundnumber DESC) AS rn
+		FROM distinct_rounds
+	),
+
+	-- 6. Mantém apenas as últimas x rodadas para cada data de referência
+	last_rounds AS (
+		SELECT dtref, year, roundnumber
+		FROM ranked_rounds
+		WHERE rn <= {last_rounds} 
+
+	),
+
+	-- 7. Junta tabela de resultados com os pilotos elegíveis em cada uma das datas de referência
+	tb_results AS (
+		SELECT p.*
+		FROM past_sessions p
+		INNER JOIN eligible_drivers e
+			ON p.dtref = e.dtref 
+			AND p.driverid = e.driverid
+		INNER JOIN last_rounds r
+			ON p.dtref = r.dtref 
+			AND p.year = r.year 
+			AND p.roundnumber = r.roundnumber
+	),
+
+	-- 8. Estatística agrupada por data de referência e piloto
+	tb_stats AS (
+  SELECT
+    dtref,
+    driverid,
+    count(DISTINCT YEAR) AS qtde_seasons,
+    count(*) AS qtde_sessions,
+    sum( CASE WHEN ( status = 'Finished' OR status LIKE '+%') THEN 1 ELSE 0 END ) AS qtde_sessions_finished,
+    sum( CASE WHEN mode = 'Race' THEN 1 ELSE 0 END ) AS qtde_race,
+    sum( CASE WHEN mode = 'Race' AND (status = 'Finished' OR status LIKE '+%') THEN 1 ELSE 0 END ) AS qtde_sessions_finished_race,
+    sum( CASE WHEN mode = 'Sprint' THEN 1 ELSE 0 END ) AS qtde_sprint,
+    sum( CASE WHEN mode = 'Sprint' AND (status = 'Finished' OR status LIKE '+%') THEN 1 ELSE 0 END ) AS qtde_sessions_finished_sprint,
+    sum( CASE WHEN POSITION = 1 THEN 1 ELSE 0 END ) AS qtde_1Pos,
+    sum( CASE WHEN POSITION = 1 AND MODE = 'Race' THEN 1 ELSE 0 END ) AS qtde_1Pos_race,
+    sum( CASE WHEN POSITION = 1 AND MODE = 'Sprint' THEN 1 ELSE 0 END ) AS qtde_1Pos_sprint,
+    sum( CASE WHEN POSITION <= 3 THEN 1 ELSE 0 END ) AS qtde_podios,
+    sum( CASE WHEN POSITION <= 3 AND mode = 'Race' THEN 1 ELSE 0 END ) AS qtde_podios_race,
+    sum( CASE WHEN POSITION <= 3 AND mode = 'Sprint' THEN 1 ELSE 0 END ) AS qtde_podios_sprint,
+    sum( CASE WHEN POSITION <= 5 THEN 1 ELSE 0 END ) AS qtde_pos5,
+    sum( CASE WHEN POSITION <= 5 AND mode = 'Race' THEN 1 ELSE 0 END ) AS qtde_pos5_race,
+    sum( CASE WHEN POSITION <= 5 AND mode = 'Sprint' THEN 1 ELSE 0 END ) AS qtde_pos5_sprint,
+    sum( CASE WHEN gridposition <= 5 THEN 1 ELSE 0 END ) AS qtde_gridpos5,
+    sum( CASE WHEN gridposition <= 5 AND mode = 'Race' THEN 1 ELSE 0 END ) AS qtde_gridpos5_race,
+    sum( CASE WHEN gridposition <= 5 AND mode = 'Sprint' THEN 1 ELSE 0 END ) AS qtde_gridpos5_sprint,
+    sum(points) AS qtde_points,
+    sum( CASE WHEN mode = 'Race' THEN points END ) AS qtde_points_race,
+    sum( CASE WHEN mode = 'Sprint' THEN points END ) AS qtde_points_sprint,
+    avg(gridposition) AS avg_gridposition,
+    avg( CASE WHEN mode = 'Race' THEN gridposition END ) AS avg_gridposition_race,
+    avg( CASE WHEN mode = 'Sprint' THEN gridposition END ) AS avg_gridposition_sprint,
+    avg(POSITION) AS avg_position,
+    avg( CASE WHEN mode = 'Race' THEN POSITION END ) AS avg_position_race,
+    avg( CASE WHEN mode = 'Sprint' THEN POSITION END ) AS avg_position_sprint,
+    sum( CASE WHEN gridposition = 1 THEN 1 ELSE 0 END ) AS qtde_1_gridposition,
+    sum( CASE WHEN gridposition = 1 AND mode = 'Race' THEN 1 ELSE 0 END ) AS qtde_1_gridposition_race,
+    sum( CASE WHEN gridposition = 1 AND mode = 'Sprint' THEN 1 ELSE 0 END ) AS qtde_1_gridposition_sprint,
+    sum( CASE WHEN gridposition = 1 AND POSITION = 1 THEN 1 ELSE 0 END ) AS qtde_pole_win,
+    sum( CASE WHEN gridposition = 1 AND POSITION = 1 AND mode = 'Race' THEN 1 ELSE 0 END ) AS qtde_pole_win_race,
+    sum( CASE WHEN gridposition = 1 AND POSITION = 1 AND mode = 'Sprint' THEN 1 ELSE 0 END ) AS qtde_pole_win_sprint,
+    sum( CASE WHEN points > 0 THEN 1 ELSE 0 END ) AS qtd_sessions_with_points,
+    sum( CASE WHEN mode = 'Race' AND points > 0 THEN 1 ELSE 0 END ) AS qtd_sessions_with_points_race,
+    sum( CASE WHEN mode = 'Sprint' AND points > 0 THEN 1 ELSE 0 END ) AS qtd_sessions_with_points_sprint,
+    sum( CASE WHEN POSITION < gridPOSITION THEN 1 ELSE 0 END ) AS qtd_sessions_with_overtake,
+    sum( CASE WHEN mode = 'Race' AND POSITION < gridPOSITION THEN 1 ELSE 0 END ) AS qtd_sessions_with_overtake_race,
+    sum( CASE WHEN mode = 'Sprint' AND POSITION < gridPOSITION THEN 1 ELSE 0 END ) AS qtd_sessions_with_overtake_sprint,
+    avg(gridPOSITION - POSITION) AS avg_overtake,
+    avg( CASE WHEN mode = 'Race' THEN gridPOSITION - POSITION END ) AS avg_overtake_race,
+    avg( CASE WHEN mode = 'Sprint' THEN gridPOSITION - POSITION END ) AS avg_overtake_sprint
+FROM tb_results
+GROUP BY dtref, driverid
+
+)
+
+SELECT *
+FROM tb_stats
+ORDER BY dtref desc, driverid
 
 """
 
@@ -242,26 +136,21 @@ ORDER BY DriverId
 spark = nekt.get_spark_session()
 
 # Listando todos os anos para fazer o union
-years = list(range(1990,2025))
+year_start, year_stop = 1990, 2026
+last_rounds = 10000
 
-# Selecionando todas as datas
-for y in years:
-    dates = spark.sql(query_dates.format(year=y)).toPandas()["dt_ref"].astype(str).tolist()
+df = spark.sql(query.format(
+  year_start = year_start,
+  year_stop = year_stop,
+  last_rounds = last_rounds
+))
 
-    # Union de todas as "fotos" do ano
-    dfs = [spark.sql(query.format(date=dt)) for dt in dates]
-    df_all = reduce(DataFrame.union, dfs)
-
-    # Quebra de lineage
-    df_all = df_all.checkpoint()
-
-    # Append para acumular todos os anos na mesma tabela
-    nekt.save_table(
-        df=df_all,
-        layer_name="Silver",
-        table_name="fs_f1_driver_life",
-        folder_name="f1",
-        mode="append"
-    )
-
-
+# Salva o dataframe
+nekt.save_table(
+    df=df,
+    layer_name="Silver",
+    table_name="fs_f1_driver_life",
+    folder_name="f1",
+    mode="merge",
+    merge_keys=["dtref", "driverid"]
+)
