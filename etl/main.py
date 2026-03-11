@@ -6,6 +6,8 @@ dotenv.load_dotenv()
 import nekt
 
 from tqdm import tqdm
+from functools import reduce
+from pyspark.sql import DataFrame
 
 # %%
 
@@ -245,17 +247,21 @@ years = list(range(1990,2025))
 # Selecionando todas as datas
 for y in years:
     dates = spark.sql(query_dates.format(year=y)).toPandas()["dt_ref"].astype(str).tolist()
-    df_all = spark.sql(query.format(date=dates.pop(0)))
 
-    for dt in tqdm(dates):
-        df_all = df_all.union(spark.sql(query.format(date=dt)))
+    # Union de todas as "fotos" do ano
+    dfs = [spark.sql(query.format(date=dt)) for dt in dates]
+    df_all = reduce(DataFrame.union, dfs)
 
-    # Salva o dataframe
+    # Quebra de lineage
+    df_all = df_all.checkpoint()
+
+    # Append para acumular todos os anos na mesma tabela
     nekt.save_table(
-      df = df_all,
-      layer_name="Silver",
-      table_name="fs_f1_driver_life",
-      folder_name="f1" 
+        df=df_all,
+        layer_name="Silver",
+        table_name="fs_f1_driver_life",
+        folder_name="f1",
+        mode="append"
     )
 
 
