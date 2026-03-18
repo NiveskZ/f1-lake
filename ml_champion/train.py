@@ -17,6 +17,13 @@ df_oot
 
 df_analytics = df[df['year'] < 2025].copy()
 # %%
+# Removendo as ultimas corridas de cada ano, tentando tratar possível leakage
+df_year_round = df_analytics[['year','dtref_life']].drop_duplicates()
+df_year_round['row_number'] = df_year_round.sort_values('dtref_life', ascending=False).groupby('year').cumcount()
+df_year_round[['row_number','dtref_life', 'year']]
+
+df_year_round = df_year_round[df_year_round['row_number'] > 1]
+df_year_round.drop('row_number', axis=1, inplace=True)
 
 # %%
 df_driver_year = df_analytics[['driverid_life', 'year','flchampion']].drop_duplicates()
@@ -29,8 +36,8 @@ train, test = model_selection.train_test_split(df_driver_year,
                                                )
 # %%
 
-df_train = train.merge(df_analytics)
-df_test = test.merge(df_analytics)
+df_train = train.merge(df_analytics).merge(df_year_round, how='inner')
+df_test = test.merge(df_analytics).merge(df_year_round, how='inner')
 
 # %%
 
@@ -100,3 +107,4 @@ plt.grid(True)
 
 features_importances = pd.Series(clf.feature_importances_, index=X_train_transform.columns)
 features_importances.sort_values(ascending=False)
+# %%
