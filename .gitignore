@@ -1,6 +1,8 @@
 *.csv
 *.parquet
+*.db
 .vscode
 .env
 
 __pycache__
+mlartifacts
