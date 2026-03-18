@@ -9,6 +9,9 @@ from sklearn import ensemble
 from sklearn import metrics
 from sklearn import model_selection
 from sklearn import pipeline
+
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', None)
 # %%
 
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
@@ -123,4 +126,24 @@ with mlflow.start_run():
     model.fit(df[features], df['flchampion'])
 
     mlflow.sklearn.log_model(model, name='model')
+# %%
+
+# Testando API
+data = df[df['dtref_life']>'2025-01-01']
+data = missing.fit_transform(data)
+data['id'] = data['driverid_life'] + "_" + data['dtref_life']
+payload = {'data': data.to_dict(orient='records')}
+
+import requests
+
+resp = requests.post('http://localhost:5001/predict', json=payload)
+print(resp.status_code)
+print(resp.json())
+
+# %%
+
+df_report = pd.DataFrame(resp.json()['data'])
+df_report['driver'] = df_report['id'].apply(lambda x: x.split("_")[0])
+df_report['dtref'] = df_report['id'].apply(lambda x: x.split("_")[1])
+df_report
 # %%
